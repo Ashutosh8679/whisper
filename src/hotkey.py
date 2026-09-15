@@ -10,7 +10,16 @@ from src.x11_hotkey import X11Hotkey
 from src.kde_wayland_hotkey import KDEWaylandHotkey
 
 
-LOG_FILE = Path.home() / "AI" / "whisper" / "hotkey.log"
+LOG_FILE = (
+    Path(
+        os.environ.get(
+            "XDG_STATE_HOME",
+            Path.home() / ".local" / "state",
+        )
+    )
+    / "whisper"
+    / "hotkey.log"
+)
 WHISPER_SERVICE = "whisper.service"
 
 
@@ -197,9 +206,9 @@ def stop_dictation(recorder):
 
 def paste_text(text):
     """
-    Copy text to the clipboard and paste using ydotool.
+    Copy text to the desktop clipboard and paste it using ydotool.
 
-    Works with the existing X11 clipboard path.
+    Uses wl-copy on Wayland and xclip on X11.
     """
 
     session_type = os.environ.get(

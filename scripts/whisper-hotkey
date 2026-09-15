@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+VENV="$PROJECT_DIR/.venv"
+
+if [[ ! -x "$VENV/bin/python" ]]; then
+    echo "ERROR: Whisper virtual environment not found."
+    echo
+    echo "Expected:"
+    echo "  $VENV"
+    echo
+    echo "Run ./install.sh first."
+    exit 1
+fi
+
+SITE_PACKAGES="$("$VENV/bin/python" -c \
+    'import site; print(site.getsitepackages()[0])'
+)"
+
+export PYTHONPATH="$PROJECT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+CUDA_LIB_DIRS=()
+
+for dir in \
+    "$SITE_PACKAGES/nvidia/cublas/lib" \
+    "$SITE_PACKAGES/nvidia/cudnn/lib"
+do
+    if [[ -d "$dir" ]]; then
+        CUDA_LIB_DIRS+=("$dir")
+    fi
+done
+
+if (( ${#CUDA_LIB_DIRS[@]} > 0 )); then
+    CUDA_PATH="$(IFS=:; echo "${CUDA_LIB_DIRS[*]}")"
+    export LD_LIBRARY_PATH="$CUDA_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+cd "$PROJECT_DIR"
+
+exec "$VENV/bin/python" -m src.hotkey start

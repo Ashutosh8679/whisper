@@ -12,22 +12,32 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # 16-bit PCM
 
-# Airdopes 141 Elite ANC Bluetooth card.
-BLUETOOTH_CARD = "bluez_card.24_DF_17_10_13_17"
+
+# Bluetooth HFP configuration.
+#
+# If BLUETOOTH_CARD is None, the recorder automatically detects
+# the first available BlueZ Bluetooth audio card.
+#
+# Set this to a specific card name if you ever want to force
+# the recorder to use one particular Bluetooth device.
+BLUETOOTH_CARD = None
+
 HFP_PROFILE = "handsfree_head_unit"
-HFP_SOURCE = "bluez_source.24_DF_17_10_13_17.handsfree_head_unit"
 
 
 class Recorder:
     """
     Records audio from the configured input source.
 
-    When the Airdopes Bluetooth microphone is available, the recorder
-    temporarily switches the Bluetooth card to HFP before recording
-    and restores the previous Bluetooth profile after recording.
+    When a Bluetooth audio card is available and the system default
+    source is being used, the recorder temporarily switches that
+    Bluetooth device to HFP microphone mode.
+
+    The previous Bluetooth profile and default audio source are
+    restored after recording.
 
     Audio is captured through the PulseAudio compatibility interface
-    using parec, then stored as a WAV file.
+    using parec and stored as a WAV file.
     """
 
     def __init__(self):
@@ -37,7 +47,8 @@ class Recorder:
         self.raw_path = None
         self.wav_path = None
 
-        # Bluetooth state saved before dictation.
+        # Bluetooth state.
+        self.bluetooth_card = None
         self.bluetooth_profile_before = None
         self.default_source_before = None
         self.bluetooth_switched = False
@@ -46,7 +57,7 @@ class Recorder:
         """
         Determine which audio source should be recorded.
 
-        'default' means parec will use the system default source.
+        'default' means parec uses the system default source.
 
         'device' means the configured PipeWire/PulseAudio source
         name is passed explicitly to parec.
@@ -115,11 +126,19 @@ class Recorder:
             check=check,
         )
 
-    def _get_bluetooth_profile(self):
+    def _find_bluetooth_card(self):
         """
-        Return the current profile of the Airdopes Bluetooth card.
+        Find an available BlueZ Bluetooth audio card.
 
-        Returns None if the card is not currently available.
+        If BLUETOOTH_CARD is configured, that specific card is used.
+
+        Otherwise, the first available BlueZ Bluetooth audio card
+        is returned.
+
+        Returns:
+            str | None:
+                Bluetooth card name, or None if no Bluetooth card
+                is available.
         """
 
         try:
@@ -128,12 +147,61 @@ class Recorder:
                 "cards",
             )
 
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+        ):
+            return None
+
+        card_names = []
+
+        for line in result.stdout.splitlines():
+            line = line.strip()
+
+            if line.startswith("Name: bluez_card."):
+                card_name = line.split(
+                    ":",
+                    1,
+                )[1].strip()
+
+                card_names.append(card_name)
+
+        # If a specific card was configured, only use that card.
+        if BLUETOOTH_CARD:
+            if BLUETOOTH_CARD in card_names:
+                return BLUETOOTH_CARD
+
+            return None
+
+        # Otherwise automatically use the first available
+        # Bluetooth audio card.
+        return card_names[0] if card_names else None
+
+    def _get_bluetooth_profile(self):
+        """
+        Return the current profile of the detected Bluetooth card.
+
+        Returns None if the card is not currently available.
+        """
+
+        if not self.bluetooth_card:
+            return None
+
+        try:
+            result = self._run_pactl(
+                "list",
+                "cards",
+            )
+
+        except (
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+        ):
             return None
 
         card_text = result.stdout
 
-        marker = f"Name: {BLUETOOTH_CARD}"
+        marker = f"Name: {self.bluetooth_card}"
 
         if marker not in card_text:
             return None
@@ -144,7 +212,9 @@ class Recorder:
         )[1]
 
         # The next card begins at the next "Name:" entry.
-        next_card = card_section.find("\nName:")
+        next_card = card_section.find(
+            "\nName:"
+        )
 
         if next_card != -1:
             card_section = card_section[:next_card]
@@ -153,13 +223,16 @@ class Recorder:
             line = line.strip()
 
             if line.startswith("Active Profile:"):
-                return line.split(":", 1)[1].strip()
+                return line.split(
+                    ":",
+                    1,
+                )[1].strip()
 
         return None
 
     def _get_default_source(self):
         """
-        Return the current PulseAudio/PipeWire default source.
+        Return the current PipeWire/PulseAudio default source.
         """
 
         try:
@@ -167,39 +240,62 @@ class Recorder:
                 "get-default-source",
             )
 
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+        ):
             return None
 
         source = result.stdout.strip()
 
         return source or None
 
-    def _bluetooth_card_available(self):
+    def _get_hfp_source(self):
         """
-        Check whether the Airdopes Bluetooth card currently exists.
+        Derive the HFP microphone source from the Bluetooth card name.
+
+        Example:
+
+            bluez_card.XX_XX_XX_XX_XX_XX
+
+        becomes:
+
+            bluez_source.XX_XX_XX_XX_XX_XX.handsfree_head_unit
         """
 
-        try:
-            result = self._run_pactl(
-                "list",
-                "cards",
-            )
+        if not self.bluetooth_card:
+            return None
 
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
+        if not self.bluetooth_card.startswith(
+            "bluez_card."
+        ):
+            return None
 
-        return f"Name: {BLUETOOTH_CARD}" in result.stdout
+        device_id = self.bluetooth_card.removeprefix(
+            "bluez_card."
+        )
+
+        return (
+            f"bluez_source.{device_id}."
+            f"{HFP_PROFILE}"
+        )
 
     def _switch_to_bluetooth_microphone(self):
         """
-        Temporarily switch the Airdopes to HFP microphone mode.
+        Temporarily switch the detected Bluetooth device to HFP.
 
         The previous Bluetooth profile and default source are saved
         so they can be restored after recording.
         """
 
-        if not self._bluetooth_card_available():
-            print("Airdopes Bluetooth card not available.")
+        self.bluetooth_card = (
+            self._find_bluetooth_card()
+        )
+
+        if not self.bluetooth_card:
+            print(
+                "No Bluetooth audio card available."
+            )
             return
 
         self.bluetooth_profile_before = (
@@ -208,6 +304,11 @@ class Recorder:
 
         self.default_source_before = (
             self._get_default_source()
+        )
+
+        print(
+            "Bluetooth card detected: "
+            f"{self.bluetooth_card}"
         )
 
         print(
@@ -220,57 +321,73 @@ class Recorder:
             f"{self.default_source_before or 'unknown'}"
         )
 
+        # If the Bluetooth device is already in HFP mode,
+        # simply make its microphone the default source.
         if self.bluetooth_profile_before == HFP_PROFILE:
             print(
-                "Airdopes already in Handsfree Head Unit mode."
+                "Bluetooth device already in "
+                "Handsfree Head Unit mode."
             )
 
-            # Make sure the HFP microphone is the default source.
             self._set_hfp_source()
 
             return
 
+        # We only automatically switch from A2DP.
+        #
+        # Other profiles are left untouched because changing them
+        # automatically could produce unexpected behaviour.
         if self.bluetooth_profile_before != "a2dp_sink":
             print(
-                "Airdopes profile is not A2DP; "
+                "Bluetooth profile is not A2DP; "
                 "leaving Bluetooth profile unchanged."
             )
+
             return
 
         print(
-            "Switching Airdopes: "
+            "Switching Bluetooth device: "
             "A2DP → Handsfree Head Unit..."
         )
 
         try:
             self._run_pactl(
                 "set-card-profile",
-                BLUETOOTH_CARD,
+                self.bluetooth_card,
                 HFP_PROFILE,
             )
 
         except subprocess.CalledProcessError as error:
             raise RuntimeError(
-                "Failed to switch Airdopes to "
-                "Handsfree Head Unit mode."
+                "Failed to switch Bluetooth device "
+                "to Handsfree Head Unit mode."
             ) from error
 
-        # PipeWire may need a short moment to create the HFP source.
+        # PipeWire may need a short moment to create
+        # the HFP microphone source.
         self._set_hfp_source()
 
         self.bluetooth_switched = True
 
         print(
-            "Airdopes microphone is now active."
+            "Bluetooth microphone is now active."
         )
 
     def _set_hfp_source(self):
         """
-        Make the Airdopes HFP microphone the default source.
+        Make the Bluetooth HFP microphone the default source.
 
         PipeWire can take a short moment to expose the source after
         changing the Bluetooth profile, so retry for a few seconds.
         """
+
+        hfp_source = self._get_hfp_source()
+
+        if not hfp_source:
+            raise RuntimeError(
+                "Could not determine the Bluetooth HFP "
+                "microphone source."
+            )
 
         last_error = None
 
@@ -278,22 +395,23 @@ class Recorder:
             try:
                 self._run_pactl(
                     "set-default-source",
-                    HFP_SOURCE,
+                    hfp_source,
                 )
 
                 print(
                     "Default source: "
-                    f"{HFP_SOURCE}"
+                    f"{hfp_source}"
                 )
 
                 return
 
             except subprocess.CalledProcessError as error:
                 last_error = error
+
                 time.sleep(0.1)
 
         raise RuntimeError(
-            "Airdopes switched to HFP, but the HFP "
+            "Bluetooth switched to HFP, but the HFP "
             "microphone source could not be selected."
         ) from last_error
 
@@ -310,15 +428,16 @@ class Recorder:
             "Restoring Bluetooth state..."
         )
 
-        # Restore the previous profile if we changed it.
+        # Restore the previous Bluetooth profile if we changed it.
         if (
             self.bluetooth_switched
             and self.bluetooth_profile_before != HFP_PROFILE
+            and self.bluetooth_card
         ):
             try:
                 self._run_pactl(
                     "set-card-profile",
-                    BLUETOOTH_CARD,
+                    self.bluetooth_card,
                     self.bluetooth_profile_before,
                 )
 
@@ -333,7 +452,7 @@ class Recorder:
                     f"profile: {error}"
                 )
 
-        # Restore the previous default source if it still exists.
+        # Restore the previous default source.
         if self.default_source_before:
             try:
                 self._run_pactl(
@@ -352,6 +471,8 @@ class Recorder:
                     f"source: {error}"
                 )
 
+        # Clear saved state.
+        self.bluetooth_card = None
         self.bluetooth_profile_before = None
         self.default_source_before = None
         self.bluetooth_switched = False
@@ -372,12 +493,15 @@ class Recorder:
 
         source = self.get_source()
 
-        # Only manage the Bluetooth profile when using the system
-        # default source. Explicit device configurations are left alone.
+        # Only manage the Bluetooth profile when using
+        # the system default source.
+        #
+        # Explicit device configurations are left alone.
         if source is None:
             self._switch_to_bluetooth_microphone()
 
-            # The system default source may now be the HFP microphone.
+            # The system default source may now be
+            # the Bluetooth HFP microphone.
             source = None
 
         command = [
@@ -396,9 +520,17 @@ class Recorder:
             str(self.raw_path)
         )
 
-        print("Starting recording...")
-        print(f"Source: {source or 'system default'}")
-        print(f"Output: {self.wav_path}")
+        print(
+            "Starting recording..."
+        )
+
+        print(
+            f"Source: {source or 'system default'}"
+        )
+
+        print(
+            f"Output: {self.wav_path}"
+        )
 
         try:
             self.process = subprocess.Popen(
@@ -431,7 +563,7 @@ class Recorder:
         Stop the active recording and convert the raw PCM
         data into a WAV file.
 
-        Bluetooth state is restored even when WAV conversion fails.
+        Bluetooth state is restored even if WAV conversion fails.
         """
 
         if self.process is None:
@@ -442,7 +574,9 @@ class Recorder:
         process = self.process
         self.process = None
 
-        print("Stopping recording...")
+        print(
+            "Stopping recording..."
+        )
 
         try:
             process.terminate()
@@ -456,7 +590,8 @@ class Recorder:
 
             if not self.raw_path.exists():
                 raise RuntimeError(
-                    "Recording failed: raw audio file was not created."
+                    "Recording failed: raw audio file "
+                    "was not created."
                 )
 
             self._convert_to_wav()
@@ -466,8 +601,8 @@ class Recorder:
 
             except OSError as error:
                 print(
-                    "Warning: could not remove temporary file: "
-                    f"{error}"
+                    "Warning: could not remove temporary "
+                    f"file: {error}"
                 )
 
             print(
@@ -477,7 +612,8 @@ class Recorder:
             return self.wav_path
 
         finally:
-            # This executes even if recording/conversion fails.
+            # Always restore Bluetooth state, even when
+            # recording or WAV conversion fails.
             self._restore_bluetooth_state()
 
     def _convert_to_wav(self):
@@ -498,7 +634,18 @@ class Recorder:
             "wb",
         ) as wav_file:
 
-            wav_file.setnchannels(CHANNELS)
-            wav_file.setsampwidth(SAMPLE_WIDTH)
-            wav_file.setframerate(SAMPLE_RATE)
-            wav_file.writeframes(audio_data)
+            wav_file.setnchannels(
+                CHANNELS
+            )
+
+            wav_file.setsampwidth(
+                SAMPLE_WIDTH
+            )
+
+            wav_file.setframerate(
+                SAMPLE_RATE
+            )
+
+            wav_file.writeframes(
+                audio_data
+            )

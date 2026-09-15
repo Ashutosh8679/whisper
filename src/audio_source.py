@@ -5,11 +5,10 @@ from config.config import TEST_AUDIO
 
 def get_audio() -> Path:
     """
-    Temporary dummy audio source.
+    Return the optional development/test audio file.
 
-    For now, this simply returns test1.mp3.
-    Later this function will be replaced with the
-    PipeWire microphone recording implementation.
+    This helper exists for the legacy one-shot transcription
+    test path. Live microphone recording is handled by Recorder.
     """
 
     if not TEST_AUDIO.exists():

@@ -1,0 +1,19 @@
+[Unit]
+Description=Local Whisper Transcription Daemon
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+
+# The installation procedure should place the Whisper
+# launcher at ~/.local/bin/whisper.
+ExecStart=%h/.local/bin/whisper daemon
+
+Restart=on-failure
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
