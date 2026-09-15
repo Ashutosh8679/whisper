@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import time
@@ -6,6 +7,7 @@ from pathlib import Path
 from src.cli import daemon_request
 from src.recorder import Recorder
 from src.x11_hotkey import X11Hotkey
+from src.kde_wayland_hotkey import KDEWaylandHotkey
 
 
 LOG_FILE = Path.home() / "AI" / "whisper" / "hotkey.log"
@@ -13,18 +15,53 @@ WHISPER_SERVICE = "whisper.service"
 
 
 def log(message):
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOG_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     timestamp = time.strftime("%H:%M:%S")
     line = f"[{timestamp}] {message}"
 
     print(line, flush=True)
 
-    with LOG_FILE.open("a", encoding="utf-8") as file:
+    with LOG_FILE.open(
+        "a",
+        encoding="utf-8",
+    ) as file:
         file.write(line + "\n")
+
+
+def create_hotkey():
+    """
+    Select the appropriate global hotkey backend
+    for the current graphical session.
+    """
+
+    session_type = os.environ.get(
+        "XDG_SESSION_TYPE",
+        "",
+    ).lower()
+
+    if session_type == "wayland":
+        log("Display server detected: Wayland")
+        log("Using KDE KGlobalAccel hotkey backend.")
+        return KDEWaylandHotkey()
+
+    if session_type == "x11":
+        log("Display server detected: X11")
+        log("Using pynput X11 hotkey backend.")
+        return X11Hotkey()
+
+    raise RuntimeError(
+        "Unsupported or unknown display server: "
+        f"{session_type!r}"
+    )
 
 
 def whisper_is_running():
     """Return True when the Whisper systemd service is active."""
+
     result = subprocess.run(
         [
             "systemctl",
@@ -43,9 +80,10 @@ def ensure_whisper_running():
     """
     Make sure the Whisper daemon is running.
 
-    If it was manually stopped with `whisper kill`, start it and
-    wait until the daemon responds to requests.
+    If it was manually stopped with `whisper kill`,
+    start it and wait until the daemon responds to requests.
     """
+
     if whisper_is_running():
         return
 
@@ -70,12 +108,12 @@ def ensure_whisper_running():
     log("Whisper service started.")
     log("Waiting for Whisper daemon to become ready...")
 
-    # The daemon loads Whisper Small onto the GPU before it
-    # starts accepting transcription requests.
-    #
-    # Poll the daemon using a harmless status request by checking
-    # that the service remains active and the Unix socket appears.
-    socket_path = Path.home() / ".cache" / "whisper" / "whisper.sock"
+    socket_path = (
+        Path.home()
+        / ".cache"
+        / "whisper"
+        / "whisper.sock"
+    )
 
     deadline = time.monotonic() + 60
 
@@ -86,7 +124,6 @@ def ensure_whisper_running():
             )
 
         if socket_path.exists():
-            # Give the daemon a short moment to finish initializing.
             time.sleep(0.25)
 
             if whisper_is_running():
@@ -102,6 +139,7 @@ def ensure_whisper_running():
 
 def start_dictation():
     """Start a dictation recording."""
+
     ensure_whisper_running()
 
     log("Starting dictation...")
@@ -116,6 +154,7 @@ def start_dictation():
 
 def stop_dictation(recorder):
     """Stop recording, transcribe through the daemon, and paste."""
+
     log("Stopping dictation...")
 
     recording_path = recorder.stop()
@@ -138,7 +177,10 @@ def stop_dictation(recorder):
             )
         )
 
-    text = response.get("text", "").strip()
+    text = response.get(
+        "text",
+        "",
+    ).strip()
 
     log(f"Whisper result: {text!r}")
 
@@ -154,11 +196,37 @@ def stop_dictation(recorder):
 
 
 def paste_text(text):
-    """Copy text to the X11 clipboard and paste using ydotool."""
-    log("Copying transcription to X11 clipboard...")
+    """
+    Copy text to the clipboard and paste using ydotool.
+
+    Works with the existing X11 clipboard path.
+    """
+
+    session_type = os.environ.get(
+        "XDG_SESSION_TYPE",
+        "",
+    ).lower()
+
+    if session_type == "wayland":
+        clipboard_command = [
+            "wl-copy",
+        ]
+
+        clipboard_name = "Wayland clipboard"
+
+    else:
+        clipboard_command = [
+            "xclip",
+            "-selection",
+            "clipboard",
+        ]
+
+        clipboard_name = "X11 clipboard"
+
+    log(f"Copying transcription to {clipboard_name}...")
 
     subprocess.run(
-        ["xclip", "-selection", "clipboard"],
+        clipboard_command,
         input=text,
         text=True,
         check=True,
@@ -183,11 +251,12 @@ def paste_text(text):
 
 def run_hold_to_talk():
     """Run the global Super+Space hold-to-talk loop."""
-    hotkey = X11Hotkey()
+
+    hotkey = create_hotkey()
 
     hotkey.start()
 
-    log("Global X11 hotkey listener started.")
+    log("Global hotkey listener started.")
     log("Hold Super+Space to dictate.")
     log("Release either key to stop and transcribe.")
 
@@ -221,11 +290,12 @@ def run_hold_to_talk():
 
     finally:
         hotkey.close()
-        log("Global X11 hotkey listener stopped.")
+        log("Global hotkey listener stopped.")
 
 
 def run_single_dictation():
     """Manual test mode; starts immediately and stops on Enter."""
+
     recorder = None
 
     try:
@@ -245,14 +315,20 @@ def run_single_dictation():
                 pass
 
     except Exception as error:
-        log(f"ERROR: {type(error).__name__}: {error}")
+        log(
+            f"ERROR: {type(error).__name__}: {error}"
+        )
+
         return 1
 
     return 0
 
 
 def main():
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOG_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     log("=" * 60)
     log("WHISPER DICTATION")
@@ -279,6 +355,7 @@ def main():
         log(
             f"ERROR: {type(error).__name__}: {error}"
         )
+
         return 1
 
     finally:
