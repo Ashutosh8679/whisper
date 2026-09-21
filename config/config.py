@@ -77,13 +77,28 @@ MODEL_SIZE = "small"
 
 # Inference device.
 #
-# "cuda" requires a compatible NVIDIA CUDA environment.
-# "cpu" can be used on systems without NVIDIA CUDA support.
-DEVICE = "cuda"
+# Automatically use CUDA when NVIDIA GPU support is available.
+# Otherwise fall back to CPU inference.
+def detect_device() -> str:
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+    except Exception:
+        pass
+
+    return "cpu"
+
+
+DEVICE = detect_device()
 
 
 # Computation type used by faster-whisper.
-COMPUTE_TYPE = "float16"
+#
+# CUDA uses float16.
+# CPU uses int8 for lower memory usage and better performance.
+COMPUTE_TYPE = "float16" if DEVICE == "cuda" else "int8"
 
 
 # Beam search width used during transcription.

@@ -10,7 +10,10 @@ from config.config import (
 
 class WhisperEngine:
     def __init__(self):
-        print("Loading Whisper Small onto GPU...")
+        print(
+            f"Loading Whisper {MODEL_SIZE} "
+            f"on {DEVICE.upper()} ({COMPUTE_TYPE})..."
+        )
 
         self.model = WhisperModel(
             MODEL_SIZE,
