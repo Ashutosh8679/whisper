@@ -379,7 +379,7 @@ def command_configure():
     """
 
     from src.config.manager import ConfigManager
-    from src.audio_sources import list_audio_sources
+    from src.audio.factory import get_audio_backend
 
     manager = ConfigManager()
 
@@ -444,7 +444,8 @@ def command_configure():
     print()
 
     try:
-        sources = list_audio_sources()
+        backend = get_audio_backend()
+        sources = backend.list_microphones()
 
     except RuntimeError as error:
 

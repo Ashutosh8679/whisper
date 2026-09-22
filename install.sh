@@ -1,5 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
+OS="$(uname -s)"
+
+case "$OS" in
+    Linux)
+        ;;
+    Darwin)
+        echo "ERROR: macOS installation is not implemented yet."
+        exit 1
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: Windows installation is not implemented yet."
+        exit 1
+        ;;
+    *)
+        echo "ERROR: Unsupported operating system: $OS"
+        exit 1
+        ;;
+esac
+
+echo "Operating system: $OS"
+echo
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV="$PROJECT_DIR/.venv"
