@@ -241,7 +241,7 @@ def paste_text(text):
         check=True,
     )
 
-    time.sleep(0.05)
+    time.sleep(0.2)
 
     log("Pasting transcription with ydotool...")
 
@@ -249,10 +249,7 @@ def paste_text(text):
         [
             "ydotool",
             "key",
-            "29:1",
-            "47:1",
-            "47:0",
-            "29:0",
+            "ctrl+v",
         ],
         check=True,
     )

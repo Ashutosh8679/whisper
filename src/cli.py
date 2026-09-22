@@ -3,7 +3,9 @@ import json
 import os
 import signal
 import socket
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 from src.audio_source import get_audio
@@ -520,6 +522,122 @@ def command_configure():
 
     return 0
 
+def command_model(args):
+    """
+    Manage the active Whisper model.
+    """
+
+    from src.model_manager import (
+        SUPPORTED_MODELS,
+        get_config_file,
+        get_current_model,
+        set_current_model,
+    )
+
+    if args.action is None:
+        print(f"Current model: {get_current_model()}")
+        return 0
+
+    if args.action == "list":
+        current_model = get_current_model()
+
+        print("Supported Whisper models:")
+        print()
+
+        for model in SUPPORTED_MODELS:
+            marker = "*" if model == current_model else " "
+            print(f" {marker} {model}")
+
+        return 0
+
+    if args.action == "set":
+        model = args.model
+
+        if model not in SUPPORTED_MODELS:
+            print(f"Error: unsupported Whisper model: {model}")
+            return 1
+
+        current_model = get_current_model()
+
+        if model == current_model:
+            print(f"Whisper model is already set to: {model}")
+            return 0
+
+        set_current_model(model)
+
+        print(f"Whisper model set to: {model}")
+        print(f"Configuration: {get_config_file()}")
+        print()
+        print("Restarting Whisper daemon...")
+        print(f"Loading Whisper {model}...")
+
+        try:
+            result = subprocess.run(
+                [
+                    "systemctl",
+                    "--user",
+                    "restart",
+                    "whisper.service",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+        except FileNotFoundError:
+            print("Error: systemctl is not available.")
+            return 1
+
+        if result.returncode != 0:
+            print("Error: failed to restart Whisper daemon.")
+
+            if result.stderr.strip():
+                print(result.stderr.strip())
+
+            return 1
+
+        print("Waiting for Whisper daemon to become ready...")
+
+        deadline = time.monotonic() + 300
+
+        while time.monotonic() < deadline:
+            try:
+                response = daemon_request(
+                    {
+                        "command": "status",
+                    }
+                )
+
+                if response.get("success"):
+                    print()
+                    print("Whisper daemon ready.")
+                    print(f"Active model: {get_current_model()}")
+                    return 0
+
+            except (
+                ConnectionRefusedError,
+                FileNotFoundError,
+                ConnectionResetError,
+                BrokenPipeError,
+                OSError,
+                json.JSONDecodeError,
+            ):
+                pass
+
+            time.sleep(0.5)
+
+        print()
+        print("Error: Whisper daemon did not become ready.")
+        print()
+        print("Check the daemon with:")
+        print("  systemctl --user status whisper.service")
+        print()
+        print("The selected model remains configured as:")
+        print(f"  {get_current_model()}")
+
+        return 1
+
+    return 1
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="whisper",
@@ -605,6 +723,43 @@ def build_parser():
         help="Stop the Whisper daemon and release GPU memory",
     )
 
+    # --------------------------------------------------------
+    # model
+    # --------------------------------------------------------
+
+    model_parser = subparsers.add_parser(
+        "model",
+        help="Manage the active Whisper model",
+    )
+
+    model_subparsers = model_parser.add_subparsers(
+        dest="action",
+    )
+
+    model_subparsers.add_parser(
+        "list",
+        help="List supported Whisper models",
+    )
+
+    model_set_parser = model_subparsers.add_parser(
+        "set",
+        help="Select the Whisper model",
+    )
+
+    model_set_parser.add_argument(
+        "model",
+        choices=(
+            "tiny",
+            "base",
+            "small",
+            "medium",
+            "large-v1",
+            "large-v2",
+            "large-v3",
+        ),
+        help="Whisper model to use",
+    )
+
     return parser
 
 
@@ -632,6 +787,9 @@ def main():
 
     if args.command == "kill":
         return command_kill()
+
+    if args.command == "model":
+        return command_model(args)
 
     parser.print_help()
 
