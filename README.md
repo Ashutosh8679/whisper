@@ -11,7 +11,7 @@ Press **`Super + Space`**, talk, release — your spoken text is instantly trans
 -  **100% Local & Private:** No cloud APIs required. Speech recognition runs entirely on your GPU via CUDA.
 -  **Instant Transcription:** Persistent daemon keeps the model loaded in GPU memory for low latency.
 -  **Hold-to-Talk Hotkey (`Super + Space`):** Native global shortcut integration for both KDE Wayland (`KGlobalAccel`) and X11 (`pynput`).
--  **Smart Bluetooth Handling:** Automatically switches Bluetooth headsets from high-quality playback (A2DP) to a hands-free microphone profile during dictation, restoring your audio state immediately afterward.
+-  **Audio Device Handling:** Works with system default microphone or configured device. For Bluetooth headsets, ensure the headset is in "Headset" or "HFP/HSP" profile (not A2DP) for microphone functionality.
 -  **Seamless Auto-Paste:** Leverages the system clipboard and `ydotool` to inject text directly into whatever application currently has focus.
 -  **User-Level Systemd Services:** Runs unobtrusively in the background via `systemctl --user`.
 
