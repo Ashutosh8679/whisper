@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from src.cli import daemon_request
+from src.daemon import SOCKET_PATH
 from src.recorder import Recorder
 from src.x11_hotkey import X11Hotkey
 from src.kde_wayland_hotkey import KDEWaylandHotkey

@@ -145,6 +145,33 @@ class PipeWireBackend(AudioBackend):
                 )
             )
 
+        # Also check for suspended Bluetooth sources via pactl
+        # (they may not appear in wpctl status but are available for recording)
+        try:
+            pactl_sources = self._run_pactl("list", "sources", "short")
+            for line in pactl_sources.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    node_id_str = parts[0].strip()
+                    source_name = parts[1].strip()
+                    
+                    if not source_name.endswith(".monitor") and source_name.startswith("bluez_source"):
+                        # Check if not already added
+                        if not any(m.id == node_id_str for m in microphones):
+                            microphones.append(
+                                Microphone(
+                                    id=node_id_str,
+                                    name=source_name,
+                                    description=source_name,
+                                    is_bluetooth=True,
+                                    backend_data={
+                                        "node_id": int(node_id_str),
+                                    },
+                                )
+                            )
+        except Exception:
+            pass
+
         return microphones
 
     def get_default_microphone(self) -> Microphone | None:
@@ -274,7 +301,6 @@ class PipeWireBackend(AudioBackend):
         an input source, then restoring the original profile. Results are
         cached in a JSON database.
         """
-        import json
         import time
         from src.audio.linux.bluetooth import BluetoothDeviceDatabase
         
@@ -296,21 +322,39 @@ class PipeWireBackend(AudioBackend):
             if "bluez" not in card_name.lower() and "bluetooth" not in card_name.lower():
                 continue
             
-            # Get current profile
+            # Get current profile and available profiles
             try:
-                profiles = self._run_pactl("list", "cards", "profiles", card_id)
-                current_profile = None
-                for profile_line in profiles.splitlines():
-                    if "*:" in profile_line:
-                        current_profile = profile_line.split(":")[0].strip().lstrip("*")
-                        break
+                profiles_output = self._run_pactl("list", "cards")
             except RuntimeError:
                 continue
+            
+            # Parse profiles
+            current_profile = None
+            available_profiles = []
+            in_profiles_section = False
+            
+            for profile_line in profiles_output.splitlines():
+                # Find the profiles section after card name
+                if card_name in profile_line and "Name:" in profile_line:
+                    in_profiles_section = True
+                    continue
+                elif in_profiles_section:
+                    # Active profile is on its own line
+                    if profile_line.strip().startswith("Active Profile:"):
+                        current_profile = profile_line.split(":", 1)[1].strip()
+                        continue
+                    # Profile lines have format: "profile_name: description"
+                    if ":" in profile_line and not profile_line.strip().startswith("Ports:") and not profile_line.strip().startswith("Active"):
+                        profile_name = profile_line.split(":")[0].strip()
+                        available_profiles.append(profile_name)
+                    elif profile_line.strip() == "" or profile_line.strip().startswith("Ports:"):
+                        break
             
             # Get MAC address
             if "." in card_name:
                 mac_part = card_name.split(".")[1] if "." in card_name else ""
-                mac = ":".join(mac_part[i:i+2] for i in range(0, len(mac_part), 2)) if mac_part else ""
+                # Remove underscores from hex representation to get proper MAC format
+                mac = mac_part.replace("_", ":")
             else:
                 continue
             
@@ -320,25 +364,33 @@ class PipeWireBackend(AudioBackend):
                 continue
             
             # Probe: temporarily switch to HFP, check for source, restore
-            if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
+            if "handsfree_head_unit" in available_profiles or "hfp_handsfree" in available_profiles:
                 try:
-                    self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
-                    time.sleep(0.5)
+                    # Only probe if currently in A2DP
+                    if current_profile and "a2dp" in current_profile.lower():
+                        self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
+                        time.sleep(0.5)
                     
-                    # Check if input source appears
+                    # Check if input source appears (HFP might already be active)
                     sources = self._run_pactl("list", "sources", "short")
-                    has_input = any(mac.lower() in src.lower() for src in sources.splitlines())
+                    # Sources are named like: bluez_source.24_DF_17_10_13_17.handsfree_head_unit
+                    # Check if our MAC (with underscores) appears in the source name
+                    mac_with_underscores = mac.replace(":", "_")
+                    has_input = any(
+                        mac_with_underscores.lower() in src.lower()
+                        for src in sources.splitlines()
+                    )
                     
                     # Cache result
                     db.upsert(card_name, mac, has_input)
                     
-                    # Restore profile
-                    if current_profile:
+                    # Restore profile if we changed it
+                    if current_profile and "a2dp" in current_profile.lower():
                         self._run_pactl("set-card-profile", card_id, current_profile)
                     
                 except Exception:
                     try:
-                        if current_profile:
+                        if current_profile and "a2dp" in current_profile.lower():
                             self._run_pactl("set-card-profile", card_id, current_profile)
                     except Exception:
                         pass

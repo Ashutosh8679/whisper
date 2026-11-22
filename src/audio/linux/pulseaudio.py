@@ -78,7 +78,8 @@ class PulseAudioBackend(AudioBackend):
             # Get MAC address from card name
             if "." in card_name:
                 mac_part = card_name.split(".")[1] if "." in card_name else ""
-                mac = ":".join(mac_part[i:i+2] for i in range(0, len(mac_part), 2)) if mac_part else ""
+                # Remove underscores from hex representation to get proper MAC format
+                mac = mac_part.replace("_", ":")
             else:
                 continue
             
@@ -96,7 +97,12 @@ class PulseAudioBackend(AudioBackend):
                     
                     # Check if input source appears
                     sources = self._run_pactl("list", "sources", "short")
-                    has_input = any(mac.lower() in src.lower() for src in sources.splitlines())
+                    # Sources are named like: bluez_source.24_DF_17_10_13_17.handsfree_head_unit
+                    mac_with_underscores = mac.replace(":", "_")
+                    has_input = any(
+                        mac_with_underscores.lower() in src.lower()
+                        for src in sources.splitlines()
+                    )
                     
                     # Cache result
                     db.upsert(card_name, mac, has_input)
