@@ -231,6 +231,12 @@ def paste_text(text):
     Uses wl-copy on Wayland and xclip on X11.
     """
 
+    # Set ydotool socket path
+    os.environ.setdefault(
+        "YDOTOOL_SOCKET",
+        "/run/user/1000/.ydotool_socket"
+    )
+    
     session_type = os.environ.get(
         "XDG_SESSION_TYPE",
         "",
