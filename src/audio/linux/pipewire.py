@@ -226,18 +226,17 @@ class PipeWireBackend(AudioBackend):
         if "bluez" not in description.lower() and "bluetooth" not in description.lower():
             return
         
-        # Get current profile using wpctl
+        # Try pulseaudio card ID first
         try:
-            output = self._run_wpctl("list", "cards", "short")
+            output = self._run_pactl("list", "cards", "short")
         except RuntimeError:
             return
         
         card_id = None
         for line in output.splitlines():
-            parts = line.strip().split()
+            parts = line.split("\t")
             if len(parts) >= 2:
-                cid = parts[0].rstrip(":")
-                cname = parts[1] if len(parts) > 1 else ""
+                cid, cname = parts[0], parts[1]
                 if "bluez" in cname.lower():
                     card_id = cid
                     break
@@ -247,11 +246,11 @@ class PipeWireBackend(AudioBackend):
         
         # Get current profile
         try:
-            profiles = self._run_wpctl("list", "card-profiles", card_id)
+            profiles = self._run_pactl("list", "cards", "profiles", card_id)
             current_profile = None
             for line in profiles.splitlines():
-                if " *" in line:
-                    current_profile = line.split()[0].rstrip(":")
+                if "*:" in line:
+                    current_profile = line.split(":")[0].strip().lstrip("*")
                     break
         except RuntimeError:
             return
@@ -262,7 +261,7 @@ class PipeWireBackend(AudioBackend):
         if current_profile and "a2dp" in current_profile.lower():
             try:
                 if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
-                    self._run_wpctl("set-card-profile", card_id, "hfp_handsfree")
+                    self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
                     time.sleep(0.5)
             except RuntimeError:
                 pass
@@ -282,28 +281,28 @@ class PipeWireBackend(AudioBackend):
         db = BluetoothDeviceDatabase()
         
         try:
-            output = self._run_wpctl("list", "cards", "short")
+            output = self._run_pactl("list", "cards", "short")
         except RuntimeError:
             return []
         
         for line in output.splitlines():
-            parts = line.strip().split()
+            parts = line.split("\t")
             if len(parts) < 2:
                 continue
             
-            card_id = parts[0].rstrip(":")
-            card_name = parts[1] if len(parts) > 1 else ""
+            card_id = parts[0]
+            card_name = parts[1]
             
             if "bluez" not in card_name.lower() and "bluetooth" not in card_name.lower():
                 continue
             
             # Get current profile
             try:
-                profiles = self._run_wpctl("list", "card-profiles", card_id)
+                profiles = self._run_pactl("list", "cards", "profiles", card_id)
                 current_profile = None
                 for profile_line in profiles.splitlines():
-                    if " *" in profile_line:
-                        current_profile = profile_line.split()[0].rstrip(":")
+                    if "*:" in profile_line:
+                        current_profile = profile_line.split(":")[0].strip().lstrip("*")
                         break
             except RuntimeError:
                 continue
@@ -323,36 +322,24 @@ class PipeWireBackend(AudioBackend):
             # Probe: temporarily switch to HFP, check for source, restore
             if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
                 try:
-                    self._run_wpctl("set-card-profile", card_id, "hfp_handsfree")
+                    self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
                     time.sleep(0.5)
                     
                     # Check if input source appears
-                    status = self._get_status()
-                    lines = status.splitlines()
+                    sources = self._run_pactl("list", "sources", "short")
+                    has_input = any(mac.lower() in src.lower() for src in sources.splitlines())
                     
-                    # Find Sources section
-                    in_sources = False
-                    for line in lines:
-                        stripped = line.strip()
-                        if stripped == "Sources:":
-                            in_sources = True
-                            continue
-                        if in_sources and "Audio" not in line:
-                            break
-                        if in_sources and "bluez" in stripped.lower():
-                            db.upsert(card_name, mac, True)
-                            break
-                    else:
-                        db.upsert(card_name, mac, False)
+                    # Cache result
+                    db.upsert(card_name, mac, has_input)
                     
                     # Restore profile
                     if current_profile:
-                        self._run_wpctl("set-card-profile", card_id, current_profile)
+                        self._run_pactl("set-card-profile", card_id, current_profile)
                     
                 except Exception:
                     try:
                         if current_profile:
-                            self._run_wpctl("set-card-profile", card_id, current_profile)
+                            self._run_pactl("set-card-profile", card_id, current_profile)
                     except Exception:
                         pass
 
@@ -368,23 +355,32 @@ class PipeWireBackend(AudioBackend):
             return
         
         try:
-            output = self._run_wpctl("list", "cards", "short")
+            output = self._run_pactl("list", "cards", "short")
             card_id = None
             for line in output.splitlines():
-                parts = line.strip().split()
+                parts = line.split("\t")
                 if len(parts) >= 2:
-                    cid = parts[0].rstrip(":")
-                    cname = parts[1] if len(parts) > 1 else ""
+                    cid, cname = parts[0], parts[1]
                     if "bluez" in cname.lower():
                         card_id = cid
                         break
             
             if card_id:
-                self._run_wpctl("set-card-profile", card_id, self._saved_profile)
-        except RuntimeError:
+                self._run_pactl("set-card-profile", card_id, self._saved_profile)
+        except (subprocess.CalledProcessError, AttributeError):
             pass
         
         self._saved_profile = None
+    
+    def _run_pactl(self, *args: str) -> str:
+        """Run pactl command and return stdout."""
+        result = subprocess.run(
+            ["pactl", *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
 
     def start_recording(
         self,
