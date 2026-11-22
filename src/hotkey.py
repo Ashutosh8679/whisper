@@ -69,8 +69,28 @@ def create_hotkey():
 
 
 def wispr_is_running():
-    """Return True when the Wispr systemd service is active."""
-
+    """Return True when the Wispr systemd service is active or daemon is responding."""
+    
+    # First check if socket exists and daemon is responding
+    socket_path = SOCKET_PATH
+    if socket_path.exists():
+        try:
+            import socket as sock_module
+            client = sock_module.socket(sock_module.AF_UNIX, sock_module.SOCK_STREAM)
+            client.settimeout(1.0)
+            client.connect(str(socket_path))
+            response = '{"command": "status"}'.encode()
+            client.sendall(response)
+            data = client.recv(1024)
+            client.close()
+            import json
+            result = json.loads(data.decode("utf-8"))
+            if result.get("success"):
+                return True
+        except Exception:
+            pass
+    
+    # Fallback to systemd check
     result = subprocess.run(
         [
             "systemctl",

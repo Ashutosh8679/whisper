@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+# If running from ~/.local/bin, PROJECT_DIR would be wrong - use absolute path
+if [[ "$PROJECT_DIR" == "/home/ash/.local" ]]; then
+    PROJECT_DIR="/home/ash/AI/wispr"
+fi
+
 VENV="$PROJECT_DIR/.venv"
 
 if [[ ! -x "$VENV/bin/python" ]]; then
@@ -16,7 +22,7 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 
 SITE_PACKAGES="$("$VENV/bin/python" -c \
-    'import site; print(site.getsitepackages()[0])'
+    'import site; print(site.getsitepackages()[0])'\
 )"
 
 export PYTHONPATH="$PROJECT_DIR${PYTHONPATH:+:$PYTHONPATH}"
