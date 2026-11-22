@@ -244,6 +244,7 @@ pactl list cards short | grep bluez
 | **CUDA Error / Model fail** | Missing NVIDIA runtime libraries or VRAM full | Check `nvidia-smi`. Verify libraries in virtual environment: `./.venv/bin/python -c "import faster_whisper"`. |
 | **Audio not recording** | `parec` unable to access default input source | Verify default mic: `pactl get-default-source`. Test audio setup with `pactl list sources short`. |
 | **Text transcribed but not pasted** | `ydotool` daemon not running or missing permissions | Test `which ydotool`. Check if transcription is copied to clipboard manually (`ctrl+v`). |
+| **Audio not captured from Bluetooth headset** | Headset in A2DP mode (high-quality audio only, no microphone) | Switch headset to "Headset" or "HFP/HSP" profile: KDE Settings → Audio → Device → Profile → Headset Head Unit. Then select the headset as audio input. |
 
 ### Viewing Logs
 
