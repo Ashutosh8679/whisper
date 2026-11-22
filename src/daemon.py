@@ -86,9 +86,6 @@ class WisprDaemon:
                 finally:
                     connection.close()
 
-        except KeyboardInterrupt:
-            print("\nStopping Wispr daemon...")
-
         finally:
             server.close()
 

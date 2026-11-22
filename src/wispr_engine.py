@@ -9,14 +9,14 @@ from config.config import (
 from src.model_manager import get_current_model
 
 
-class WhisperEngine:
-    """Whisper transcription engine."""
+class WisprEngine:
+    """Wispr transcription engine."""
 
     def __init__(self):
         self.model_name = get_current_model()
 
         print(
-            f"Loading Whisper {self.model_name} "
+            f"Loading Wispr {self.model_name} "
             f"on {DEVICE.upper()} ({COMPUTE_TYPE})..."
         )
 
@@ -26,7 +26,7 @@ class WhisperEngine:
             compute_type=COMPUTE_TYPE,
         )
 
-        print("Whisper loaded.")
+        print("Wispr loaded.")
 
     def transcribe(self, audio_path):
         """Transcribe an audio file."""
