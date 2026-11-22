@@ -53,20 +53,11 @@ def create_hotkey():
         "",
     ).lower()
 
-    if session_type == "wayland":
-        log("Display server detected: Wayland")
-        log("Using KDE KGlobalAccel hotkey backend.")
-        return KDEWaylandHotkey()
-
-    if session_type == "x11":
-        log("Display server detected: X11")
-        log("Using pynput X11 hotkey backend.")
-        return X11Hotkey()
-
-    raise RuntimeError(
-        "Unsupported or unknown display server: "
-        f"{session_type!r}"
-    )
+    # Always prefer evdev backend as it's more reliable
+    # than KGlobalAccel on mixed Wayland/X11 setups
+    log("Using evdev hotkey backend.")
+    from src.evdev_hotkey import EvdevHotkey
+    return EvdevHotkey()
 
 
 def wispr_is_running():
