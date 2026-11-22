@@ -273,24 +273,31 @@ class PipeWireBackend(AudioBackend):
         
         # Get current profile
         try:
-            profiles = self._run_pactl("list", "cards", "profiles", card_id)
+            # Use pactl list cards to get profiles
+            profiles_output = self._run_pactl("list", "cards")
             current_profile = None
-            for line in profiles.splitlines():
-                if "*:" in line:
-                    current_profile = line.split(":")[0].strip().lstrip("*")
+            in_card = False
+            for line in profiles_output.splitlines():
+                if f"Name: {microphone.name}" in line or f"Card #{card_id}" in line:
+                    in_card = True
+                elif in_card and "Active Profile:" in line:
+                    current_profile = line.split(":", 1)[1].strip()
                     break
-        except RuntimeError:
-            return
-        
+                elif in_card and line.startswith("Card #"):
+                    break
+        except Exception:
+            current_profile = None
+
         self._saved_profile = current_profile
-        
+
         # Switch to HFP if needed
         if current_profile and "a2dp" in current_profile.lower():
             try:
-                if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
+                # Check if HFP is available
+                if "hfp_handsfree" in profiles_output or "handsfree" in profiles_output:
                     self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
                     time.sleep(0.5)
-            except RuntimeError:
+            except Exception:
                 pass
 
     def discover_bluetooth_devices(self) -> list[dict]:
