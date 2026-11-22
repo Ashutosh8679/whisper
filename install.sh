@@ -7,7 +7,7 @@ PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV="$PROJECT_DIR/.venv"
 
 echo "=============================================="
-echo " Whisper Local Dictation Installer"
+echo " Wispr Local Dictation Installer"
 echo "=============================================="
 echo
 echo "Operating system: $OS"
@@ -131,7 +131,7 @@ install_linux_dependencies() {
         echo
     fi
 
-    local uinput_rule="/etc/udev/rules.d/99-whisper-uinput.rules"
+    local uinput_rule="/etc/udev/rules.d/99-wispr-uinput.rules"
 
     echo "Configuring /dev/uinput access..."
     sudo tee "$uinput_rule" >/dev/null <<'EOF'
@@ -159,10 +159,10 @@ EOF
         echo "Your current login session does not yet have the new"
         echo "input-group membership."
         echo
-        echo "Log out and log back in before using Whisper's"
+        echo "Log out and log back in before using Wispr's"
         echo "ydotool-based paste functionality."
         echo
-        echo "The Whisper services will not be started by this"
+        echo "The Wispr services will not be started by this"
         echo "installer until the new group membership is active."
         echo
         return 10
@@ -183,8 +183,8 @@ EOF
 install_linux() {
     local LOCAL_BIN="$HOME/.local/bin"
     local SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
-    local WHISPER_LAUNCHER="$LOCAL_BIN/whisper"
-    local HOTKEY_LAUNCHER="$LOCAL_BIN/whisper-hotkey"
+    local WISPR_LAUNCHER="$LOCAL_BIN/wispr"
+    local HOTKEY_LAUNCHER="$LOCAL_BIN/wispr-hotkey"
 
     local dependency_status=0
 
@@ -242,7 +242,7 @@ install_linux() {
 
     echo
 
-    echo "Installing Whisper Python dependencies..."
+    echo "Installing Wispr Python dependencies..."
     "$VENV/bin/python" -m pip install -r "$PROJECT_DIR/requirements.txt"
     echo
 
@@ -268,7 +268,7 @@ install_linux() {
             -e '/^SCRIPT_DIR=/d' \
             -e '/^PROJECT_DIR=/d' \
             -e '/^VENV=/d' \
-            "$PROJECT_DIR/scripts/whisper"
+            "$PROJECT_DIR/scripts/wispr"
     } > "$TEMP_WHISPER"
 
     {
@@ -281,14 +281,14 @@ install_linux() {
             -e '/^SCRIPT_DIR=/d' \
             -e '/^PROJECT_DIR=/d' \
             -e '/^VENV=/d' \
-            "$PROJECT_DIR/scripts/whisper-hotkey"
+            "$PROJECT_DIR/scripts/wispr-hotkey"
     } > "$TEMP_HOTKEY"
 
-    install -m 755 "$TEMP_WHISPER" "$WHISPER_LAUNCHER"
+    install -m 755 "$TEMP_WHISPER" "$WISPR_LAUNCHER"
     install -m 755 "$TEMP_HOTKEY" "$HOTKEY_LAUNCHER"
 
     echo "Installed:"
-    echo "  $WHISPER_LAUNCHER"
+    echo "  $WISPR_LAUNCHER"
     echo "  $HOTKEY_LAUNCHER"
     echo
 
@@ -296,24 +296,24 @@ install_linux() {
     mkdir -p "$SYSTEMD_USER_DIR"
 
     install -m 644 \
-        "$PROJECT_DIR/systemd/whisper.service" \
-        "$SYSTEMD_USER_DIR/whisper.service"
+        "$PROJECT_DIR/systemd/wispr.service" \
+        "$SYSTEMD_USER_DIR/wispr.service"
 
     install -m 644 \
-        "$PROJECT_DIR/systemd/whisper-hotkey.service" \
-        "$SYSTEMD_USER_DIR/whisper-hotkey.service"
+        "$PROJECT_DIR/systemd/wispr-hotkey.service" \
+        "$SYSTEMD_USER_DIR/wispr-hotkey.service"
 
     echo "Installed:"
-    echo "  $SYSTEMD_USER_DIR/whisper.service"
-    echo "  $SYSTEMD_USER_DIR/whisper-hotkey.service"
+    echo "  $SYSTEMD_USER_DIR/wispr.service"
+    echo "  $SYSTEMD_USER_DIR/wispr-hotkey.service"
     echo
 
     echo "Reloading user systemd manager..."
     systemctl --user daemon-reload
 
-    echo "Enabling Whisper services..."
-    systemctl --user enable whisper.service
-    systemctl --user enable whisper-hotkey.service
+    echo "Enabling Wispr services..."
+    systemctl --user enable wispr.service
+    systemctl --user enable wispr-hotkey.service
     echo
 
     if ((dependency_status == 10)); then
@@ -321,7 +321,7 @@ install_linux() {
         echo " Installation prepared"
         echo "=============================================="
         echo
-        echo "Whisper has been installed, but the services were"
+        echo "Wispr has been installed, but the services were"
         echo "not started because your current session does not"
         echo "yet have input-group access."
         echo
@@ -332,19 +332,19 @@ install_linux() {
         return 0
     fi
 
-    echo "Starting Whisper daemon..."
-    systemctl --user restart whisper.service
+    echo "Starting Wispr daemon..."
+    systemctl --user restart wispr.service
 
-    echo "Starting Whisper hotkey service..."
-    systemctl --user restart whisper-hotkey.service
+    echo "Starting Wispr hotkey service..."
+    systemctl --user restart wispr-hotkey.service
 
     echo
-    echo "Waiting for Whisper daemon to become ready..."
+    echo "Waiting for Wispr daemon to become ready..."
 
     DAEMON_READY=0
 
     for _ in {1..30}; do
-        if "$WHISPER_LAUNCHER" status >/dev/null 2>&1; then
+        if "$WISPR_LAUNCHER" status >/dev/null 2>&1; then
             DAEMON_READY=1
             break
         fi
@@ -353,17 +353,17 @@ install_linux() {
 
     if ((DAEMON_READY == 0)); then
         echo
-        echo "ERROR: Whisper daemon did not become ready within 30 seconds."
+        echo "ERROR: Wispr daemon did not become ready within 30 seconds."
         echo
-        echo "----- Whisper service status -----"
-        systemctl --user --no-pager --plain status whisper.service
+        echo "----- Wispr service status -----"
+        systemctl --user --no-pager --plain status wispr.service
         echo
-        echo "----- Recent Whisper logs -----"
-        journalctl --user -u whisper.service -n 30 --no-pager
+        echo "----- Recent Wispr logs -----"
+        journalctl --user -u wispr.service -n 30 --no-pager
         exit 1
     fi
 
-    echo "Whisper daemon is ready."
+    echo "Wispr daemon is ready."
     echo
 
     echo "=============================================="
@@ -373,11 +373,11 @@ install_linux() {
 
     echo "----- Launcher -----"
 
-    if "$WHISPER_LAUNCHER" status; then
+    if "$WISPR_LAUNCHER" status; then
         :
     else
         echo
-        echo "ERROR: Whisper launcher verification failed."
+        echo "ERROR: Wispr launcher verification failed."
         exit 1
     fi
 
@@ -385,8 +385,8 @@ install_linux() {
 
     echo "----- Services -----"
     systemctl --user --no-pager --plain status \
-        whisper.service \
-        whisper-hotkey.service
+        wispr.service \
+        wispr-hotkey.service
 
     echo
 

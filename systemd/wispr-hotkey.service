@@ -1,0 +1,20 @@
+[Unit]
+Description=Global Wispr Hold-to-Talk Hotkey
+After=graphical-session.target wispr.service
+Wants=graphical-session.target
+Requires=wispr.service
+
+[Service]
+Type=simple
+
+# The installation procedure should place the Wispr
+# launcher at ~/.local/bin/wispr-hotkey.
+ExecStart=%h/.local/bin/wispr-hotkey
+
+Restart=on-failure
+RestartSec=3
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

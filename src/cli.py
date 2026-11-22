@@ -11,17 +11,17 @@ from pathlib import Path
 from src.audio_source import get_audio
 from src.daemon import SOCKET_PATH
 from src.recording_manager import RecordingManager
-from src.whisper_engine import WhisperEngine
+from src.wispr_engine import WisprEngine
 
 def daemon_request(request):
     """
-    Send a request to the running Whisper daemon
+    Send a request to the running Wispr daemon
     and return its JSON response.
     """
 
     if not SOCKET_PATH.exists():
         raise RuntimeError(
-            "Whisper daemon is not running."
+            "Wispr daemon is not running."
         )
 
     client = socket.socket(
@@ -42,7 +42,7 @@ def daemon_request(request):
 
         if not response:
             raise RuntimeError(
-                "Whisper daemon closed the connection."
+                "Wispr daemon closed the connection."
             )
 
         return json.loads(
@@ -55,10 +55,10 @@ def daemon_request(request):
 def command_transcribe(audio_path=None):
     """
     Transcribe an audio file using the persistent
-    Whisper daemon when it is running.
+    Wispr daemon when it is running.
 
     If the daemon is not running, fall back to
-    loading Whisper directly.
+    loading Wispr directly.
     """
 
     if audio_path is None:
@@ -124,7 +124,7 @@ def command_transcribe(audio_path=None):
             OSError,
         ):
             print(
-                "Warning: Whisper daemon could not "
+                "Warning: Wispr daemon could not "
                 "be contacted."
             )
 
@@ -133,10 +133,10 @@ def command_transcribe(audio_path=None):
             )
 
     # --------------------------------------------------------
-    # Fallback: load Whisper directly.
+    # Fallback: load Wispr directly.
     # --------------------------------------------------------
 
-    engine = WhisperEngine()
+    engine = WisprEngine()
 
     text, info = engine.transcribe(
         audio_path
@@ -158,7 +158,7 @@ def command_transcribe(audio_path=None):
     Transcribe an audio file.
 
     This is the one-off transcription command.
-    It loads Whisper for this request and exits.
+    It loads Wispr for this request and exits.
     """
 
     if audio_path is None:
@@ -173,7 +173,7 @@ def command_transcribe(audio_path=None):
 
     print(f"Audio: {audio_path}")
 
-    engine = WhisperEngine()
+    engine = WisprEngine()
 
     text, info = engine.transcribe(audio_path)
 
@@ -223,7 +223,7 @@ def command_cleanup():
 
 def command_daemon():
     """
-    Start the persistent Whisper daemon.
+    Start the persistent Wispr daemon.
     """
 
     from src.daemon import main as daemon_main
@@ -235,11 +235,11 @@ def command_daemon():
 
 def command_status():
     """
-    Check whether the Whisper daemon is running.
+    Check whether the Wispr daemon is running.
     """
 
     if not SOCKET_PATH.exists():
-        print("Whisper daemon: NOT RUNNING")
+        print("Wispr daemon: NOT RUNNING")
         return 1
 
     client = socket.socket(
@@ -266,15 +266,15 @@ def command_status():
             )
 
             if data.get("success"):
-                print("Whisper daemon: RUNNING")
+                print("Wispr daemon: RUNNING")
                 print(f"Socket: {SOCKET_PATH}")
                 return 0
 
-        print("Whisper daemon: NOT RUNNING")
+        print("Wispr daemon: NOT RUNNING")
         return 1
 
     except (ConnectionRefusedError, FileNotFoundError, OSError):
-        print("Whisper daemon: NOT RUNNING")
+        print("Wispr daemon: NOT RUNNING")
         return 1
 
     finally:
@@ -283,11 +283,11 @@ def command_status():
 
 def command_kill():
     """
-    Ask the Whisper daemon to shut itself down gracefully.
+    Ask the Wispr daemon to shut itself down gracefully.
     """
 
     if not SOCKET_PATH.exists():
-        print("Whisper daemon is not running.")
+        print("Wispr daemon is not running.")
         return 0
 
     try:
@@ -308,8 +308,8 @@ def command_kill():
 
             return 1
 
-        print("Whisper daemon shutdown requested.")
-        print("Whisper model will be unloaded from VRAM.")
+        print("Wispr daemon shutdown requested.")
+        print("Wispr model will be unloaded from VRAM.")
 
         return 0
 
@@ -321,17 +321,17 @@ def command_kill():
         OSError,
     ):
         print(
-            "Whisper daemon could not be contacted."
+            "Wispr daemon could not be contacted."
         )
 
         return 1
         
     """
-    Stop the Whisper daemon and release GPU memory.
+    Stop the Wispr daemon and release GPU memory.
     """
 
     if not SOCKET_PATH.exists():
-        print("Whisper daemon is not running.")
+        print("Wispr daemon is not running.")
         return 0
 
     # Find the daemon process using the socket.
@@ -354,7 +354,7 @@ def command_kill():
                 pids.append(int(token))
 
         if not pids:
-            print("Whisper socket exists, but no daemon process was found.")
+            print("Wispr socket exists, but no daemon process was found.")
             print("Removing stale socket.")
 
             SOCKET_PATH.unlink(missing_ok=True)
@@ -362,16 +362,16 @@ def command_kill():
             return 0
 
         for pid in pids:
-            print(f"Stopping Whisper daemon (PID {pid})...")
+            print(f"Stopping Wispr daemon (PID {pid})...")
             os.kill(pid, signal.SIGTERM)
 
-        print("Whisper daemon stopped.")
-        print("Whisper model should now be unloaded from VRAM.")
+        print("Wispr daemon stopped.")
+        print("Wispr model should now be unloaded from VRAM.")
 
         return 0
 
     except Exception as error:
-        print(f"Error stopping Whisper daemon: {error}")
+        print(f"Error stopping Wispr daemon: {error}")
         return 1
 
 
@@ -387,11 +387,11 @@ def command_configure():
 
     print()
     print("========================================")
-    print("       Whisper Audio Configuration")
+    print("       Wispr Audio Configuration")
     print("========================================")
     print()
 
-    print("How should Whisper select your microphone?")
+    print("How should Wispr select your microphone?")
     print()
     print("  1. Use the system default input")
     print("  2. Choose a specific input device")
@@ -461,7 +461,7 @@ def command_configure():
         print()
         print(
             "Connect a microphone and run "
-            "'whisper configure' again."
+            "'wispr configure' again."
         )
 
         return 1
@@ -524,7 +524,7 @@ def command_configure():
 
 def command_model(args):
     """
-    Manage the active Whisper model.
+    Manage the active Wispr model.
     """
 
     from src.model_manager import (
@@ -541,7 +541,7 @@ def command_model(args):
     if args.action == "list":
         current_model = get_current_model()
 
-        print("Supported Whisper models:")
+        print("Supported Wispr models:")
         print()
 
         for model in SUPPORTED_MODELS:
@@ -554,22 +554,22 @@ def command_model(args):
         model = args.model
 
         if model not in SUPPORTED_MODELS:
-            print(f"Error: unsupported Whisper model: {model}")
+            print(f"Error: unsupported Wispr model: {model}")
             return 1
 
         current_model = get_current_model()
 
         if model == current_model:
-            print(f"Whisper model is already set to: {model}")
+            print(f"Wispr model is already set to: {model}")
             return 0
 
         set_current_model(model)
 
-        print(f"Whisper model set to: {model}")
+        print(f"Wispr model set to: {model}")
         print(f"Configuration: {get_config_file()}")
         print()
-        print("Restarting Whisper daemon...")
-        print(f"Loading Whisper {model}...")
+        print("Restarting Wispr daemon...")
+        print(f"Loading Wispr {model}...")
 
         try:
             result = subprocess.run(
@@ -577,7 +577,7 @@ def command_model(args):
                     "systemctl",
                     "--user",
                     "restart",
-                    "whisper.service",
+                    "wispr.service",
                 ],
                 capture_output=True,
                 text=True,
@@ -588,14 +588,14 @@ def command_model(args):
             return 1
 
         if result.returncode != 0:
-            print("Error: failed to restart Whisper daemon.")
+            print("Error: failed to restart Wispr daemon.")
 
             if result.stderr.strip():
                 print(result.stderr.strip())
 
             return 1
 
-        print("Waiting for Whisper daemon to become ready...")
+        print("Waiting for Wispr daemon to become ready...")
 
         deadline = time.monotonic() + 300
 
@@ -609,7 +609,7 @@ def command_model(args):
 
                 if response.get("success"):
                     print()
-                    print("Whisper daemon ready.")
+                    print("Wispr daemon ready.")
                     print(f"Active model: {get_current_model()}")
                     return 0
 
@@ -626,10 +626,10 @@ def command_model(args):
             time.sleep(0.5)
 
         print()
-        print("Error: Whisper daemon did not become ready.")
+        print("Error: Wispr daemon did not become ready.")
         print()
         print("Check the daemon with:")
-        print("  systemctl --user status whisper.service")
+        print("  systemctl --user status wispr.service")
         print()
         print("The selected model remains configured as:")
         print(f"  {get_current_model()}")
@@ -640,8 +640,8 @@ def command_model(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="whisper",
-        description="Local Whisper transcription system",
+        prog="wispr",
+        description="Local Wispr transcription system",
     )
 
     subparsers = parser.add_subparsers(
@@ -655,7 +655,7 @@ def build_parser():
 
     subparsers.add_parser(
         "configure",
-        help="Configure Whisper",
+        help="Configure Wispr",
     )
 
     # --------------------------------------------------------
@@ -679,7 +679,7 @@ def build_parser():
 
     subparsers.add_parser(
         "daemon",
-        help="Start the persistent Whisper daemon",
+        help="Start the persistent Wispr daemon",
     )
 
     # --------------------------------------------------------
@@ -688,7 +688,7 @@ def build_parser():
 
     subparsers.add_parser(
         "status",
-        help="Check whether the Whisper daemon is running",
+        help="Check whether the Wispr daemon is running",
     )
 
     # --------------------------------------------------------
@@ -720,7 +720,7 @@ def build_parser():
 
     subparsers.add_parser(
         "kill",
-        help="Stop the Whisper daemon and release GPU memory",
+        help="Stop the Wispr daemon and release GPU memory",
     )
 
     # --------------------------------------------------------
@@ -729,7 +729,7 @@ def build_parser():
 
     model_parser = subparsers.add_parser(
         "model",
-        help="Manage the active Whisper model",
+        help="Manage the active Wispr model",
     )
 
     model_subparsers = model_parser.add_subparsers(
@@ -738,12 +738,12 @@ def build_parser():
 
     model_subparsers.add_parser(
         "list",
-        help="List supported Whisper models",
+        help="List supported Wispr models",
     )
 
     model_set_parser = model_subparsers.add_parser(
         "set",
-        help="Select the Whisper model",
+        help="Select the Wispr model",
     )
 
     model_set_parser.add_argument(
@@ -757,7 +757,7 @@ def build_parser():
             "large-v2",
             "large-v3",
         ),
-        help="Whisper model to use",
+        help="Wispr model to use",
     )
 
     return parser

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME = "whisper"
+APP_NAME = "wispr"
 
 
 def get_config_dir() -> Path:
@@ -35,7 +35,7 @@ DEFAULT_CONFIG = {
 
 class ConfigManager:
     """
-    Handles loading and saving Whisper's user configuration.
+    Handles loading and saving Wispr's user configuration.
     """
 
     def __init__(self):

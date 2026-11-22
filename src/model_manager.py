@@ -16,7 +16,7 @@ DEFAULT_MODEL = "small"
 
 
 def get_config_dir() -> Path:
-    """Return the Whisper user configuration directory."""
+    """Return the Wispr user configuration directory."""
 
     xdg_config_home = Path(
         __import__("os").environ.get(
@@ -25,11 +25,11 @@ def get_config_dir() -> Path:
         )
     )
 
-    return xdg_config_home / "whisper"
+    return xdg_config_home / "wispr"
 
 
 def get_config_file() -> Path:
-    """Return the Whisper configuration file path."""
+    """Return the Wispr configuration file path."""
 
     return get_config_dir() / "config.json"
 
@@ -42,7 +42,7 @@ def is_supported_model(model: str) -> bool:
 
 def get_current_model() -> str:
     """
-    Return the currently selected Whisper model.
+    Return the currently selected Wispr model.
 
     A missing or invalid configuration falls back to the
     default model.
@@ -69,11 +69,11 @@ def get_current_model() -> str:
 
 
 def set_current_model(model: str) -> None:
-    """Persist the selected Whisper model."""
+    """Persist the selected Wispr model."""
 
     if not is_supported_model(model):
         raise ValueError(
-            f"Unsupported Whisper model: {model}"
+            f"Unsupported Wispr model: {model}"
         )
 
     config_dir = get_config_dir()

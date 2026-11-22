@@ -1,14 +1,14 @@
 [Unit]
-Description=Local Whisper Transcription Daemon
+Description=Local Wispr Transcription Daemon
 After=graphical-session.target
 Wants=graphical-session.target
 
 [Service]
 Type=simple
 
-# The installation procedure should place the Whisper
-# launcher at ~/.local/bin/whisper.
-ExecStart=%h/.local/bin/whisper daemon
+# The installation procedure should place the Wispr
+# launcher at ~/.local/bin/wispr.
+ExecStart=%h/.local/bin/wispr daemon
 
 Restart=on-failure
 RestartSec=5

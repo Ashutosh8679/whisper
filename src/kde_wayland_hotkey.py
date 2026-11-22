@@ -10,8 +10,8 @@ KGLOBALACCEL_PATH = "/kglobalaccel"
 KGLOBALACCEL_INTERFACE = "org.kde.KGlobalAccel"
 COMPONENT_INTERFACE = "org.kde.kglobalaccel.Component"
 
-COMPONENT_UNIQUE = "whisper"
-COMPONENT_FRIENDLY = "Whisper Dictation"
+COMPONENT_UNIQUE = "wispr"
+COMPONENT_FRIENDLY = "Wispr Dictation"
 
 ACTION_UNIQUE = "hold_to_talk"
 ACTION_FRIENDLY = "Hold to Talk"
@@ -169,7 +169,7 @@ class KDEWaylandHotkey:
             body=[
                 "type='signal',"
                 "sender='org.kde.kglobalaccel',"
-                "path='/component/whisper',"
+                "path='/component/wispr',"
                 "interface='org.kde.kglobalaccel.Component'"
             ],
         )
@@ -190,7 +190,7 @@ class KDEWaylandHotkey:
         if message.message_type != MessageType.SIGNAL:
             return
 
-        if message.path != "/component/whisper":
+        if message.path != "/component/wispr":
             return
 
         if message.interface != COMPONENT_INTERFACE:

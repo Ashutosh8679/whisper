@@ -39,7 +39,7 @@ class LinuxAudioBackend(AudioBackend):
 
         raise RuntimeError(
             "No supported Linux audio backend was found.\n"
-            "Whisper requires either:\n"
+            "Wispr requires either:\n"
             "  - PipeWire/WirePlumber (wpctl), or\n"
             "  - PulseAudio compatibility tools (pactl + parec)."
         )

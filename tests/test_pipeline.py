@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.recorder import Recorder
-from src.whisper_engine import WhisperEngine
+from src.wispr_engine import WisprEngine
 
 
 def test_recording_pipeline():
@@ -17,7 +17,7 @@ def test_recording_pipeline():
     assert audio_path.exists()
     assert audio_path.stat().st_size > 0
 
-    engine = WhisperEngine()
+    engine = WisprEngine()
 
     text, info = engine.transcribe(audio_path)
 

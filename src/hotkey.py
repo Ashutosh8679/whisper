@@ -17,10 +17,10 @@ LOG_FILE = (
             Path.home() / ".local" / "state",
         )
     )
-    / "whisper"
+    / "wispr"
     / "hotkey.log"
 )
-WHISPER_SERVICE = "whisper.service"
+WISPR_SERVICE = "wispr.service"
 
 
 def log(message):
@@ -68,8 +68,8 @@ def create_hotkey():
     )
 
 
-def whisper_is_running():
-    """Return True when the Whisper systemd service is active."""
+def wispr_is_running():
+    """Return True when the Wispr systemd service is active."""
 
     result = subprocess.run(
         [
@@ -77,7 +77,7 @@ def whisper_is_running():
             "--user",
             "is-active",
             "--quiet",
-            WHISPER_SERVICE,
+            WISPR_SERVICE,
         ],
         check=False,
     )
@@ -85,71 +85,71 @@ def whisper_is_running():
     return result.returncode == 0
 
 
-def ensure_whisper_running():
+def ensure_wispr_running():
     """
-    Make sure the Whisper daemon is running.
+    Make sure the Wispr daemon is running.
 
-    If it was manually stopped with `whisper kill`,
+    If it was manually stopped with `wispr kill`,
     start it and wait until the daemon responds to requests.
     """
 
-    if whisper_is_running():
+    if wispr_is_running():
         return
 
-    log("Whisper daemon is not running.")
-    log("Starting Whisper service...")
+    log("Wispr daemon is not running.")
+    log("Starting Wispr service...")
 
     result = subprocess.run(
         [
             "systemctl",
             "--user",
             "start",
-            WHISPER_SERVICE,
+            WISPR_SERVICE,
         ],
         check=False,
     )
 
     if result.returncode != 0:
         raise RuntimeError(
-            "Failed to start whisper.service."
+            "Failed to start wispr.service."
         )
 
-    log("Whisper service started.")
-    log("Waiting for Whisper daemon to become ready...")
+    log("Wispr service started.")
+    log("Waiting for Wispr daemon to become ready...")
 
     socket_path = (
         Path.home()
         / ".cache"
-        / "whisper"
-        / "whisper.sock"
+        / "wispr"
+        / "wispr.sock"
     )
 
     deadline = time.monotonic() + 60
 
     while time.monotonic() < deadline:
-        if not whisper_is_running():
+        if not wispr_is_running():
             raise RuntimeError(
-                "Whisper service stopped while starting."
+                "Wispr service stopped while starting."
             )
 
         if socket_path.exists():
             time.sleep(0.25)
 
-            if whisper_is_running():
-                log("Whisper daemon is ready.")
+            if wispr_is_running():
+                log("Wispr daemon is ready.")
                 return
 
         time.sleep(0.25)
 
     raise RuntimeError(
-        "Timed out waiting for Whisper daemon to become ready."
+        "Timed out waiting for Wispr daemon to become ready."
     )
 
 
 def start_dictation():
     """Start a dictation recording."""
 
-    ensure_whisper_running()
+    ensure_wispr_running()
 
     log("Starting dictation...")
 
@@ -169,7 +169,7 @@ def stop_dictation(recorder):
     recording_path = recorder.stop()
 
     log(f"Recording saved: {recording_path}")
-    log("Sending recording to Whisper daemon...")
+    log("Sending recording to Wispr daemon...")
 
     response = daemon_request(
         {
@@ -182,7 +182,7 @@ def stop_dictation(recorder):
         raise RuntimeError(
             response.get(
                 "error",
-                "Whisper transcription failed.",
+                "Wispr transcription failed.",
             )
         )
 
@@ -191,10 +191,10 @@ def stop_dictation(recorder):
         "",
     ).strip()
 
-    log(f"Whisper result: {text!r}")
+    log(f"Wispr result: {text!r}")
 
     if not text:
-        log("Whisper returned empty text.")
+        log("Wispr returned empty text.")
         return ""
 
     paste_text(text)
@@ -337,7 +337,7 @@ def main():
     )
 
     log("=" * 60)
-    log("WHISPER DICTATION")
+    log("WISPR DICTATION")
 
     try:
         if len(sys.argv) > 1:
@@ -365,7 +365,7 @@ def main():
         return 1
 
     finally:
-        log("WHISPER DICTATION FINISHED")
+        log("WISPR DICTATION FINISHED")
         log("=" * 60)
 
 

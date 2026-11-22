@@ -3,17 +3,17 @@ import os
 import socket
 from pathlib import Path
 
-from src.whisper_engine import WhisperEngine
+from src.wispr_engine import WisprEngine
 
 
-SOCKET_PATH = Path.home() / ".cache" / "whisper" / "whisper.sock"
+SOCKET_PATH = Path.home() / ".cache" / "wispr" / "wispr.sock"
 
 
-class WhisperDaemon:
+class WisprDaemon:
     """
-    Persistent Whisper transcription daemon.
+    Persistent Wispr transcription daemon.
 
-    Whisper is loaded once and remains in memory while the
+    Wispr is loaded once and remains in memory while the
     daemon waits for requests over a Unix domain socket.
     """
 
@@ -26,12 +26,12 @@ class WhisperDaemon:
             exist_ok=True,
         )
 
-        print("Starting Whisper daemon...")
-        print("Loading Whisper Small onto GPU...")
+        print("Starting Wispr daemon...")
+        print("Loading Wispr Small onto GPU...")
 
-        self.engine = WhisperEngine()
+        self.engine = WisprEngine()
 
-        print("Whisper daemon ready.")
+        print("Wispr daemon ready.")
         print(f"Socket: {self.socket_path}")
 
     def remove_old_socket(self):
@@ -61,7 +61,7 @@ class WhisperDaemon:
 
         server.listen(5)
 
-        print("Whisper daemon is waiting for requests...")
+        print("Wispr daemon is waiting for requests...")
 
         try:
             while self.running:
@@ -87,7 +87,7 @@ class WhisperDaemon:
                     connection.close()
 
         except KeyboardInterrupt:
-            print("\nStopping Whisper daemon...")
+            print("\nStopping Wispr daemon...")
 
         finally:
             server.close()
@@ -95,10 +95,10 @@ class WhisperDaemon:
             if self.socket_path.exists():
                 self.socket_path.unlink()
 
-            # Explicitly release the Whisper engine.
+            # Explicitly release the Wispr engine.
             self.engine = None
 
-            print("Whisper daemon stopped.")
+            print("Wispr daemon stopped.")
 
     def handle_request(self, connection):
         """
@@ -217,7 +217,7 @@ class WhisperDaemon:
 
 
 def main():
-    daemon = WhisperDaemon()
+    daemon = WisprDaemon()
     daemon.start()
 
 

@@ -6,7 +6,7 @@ PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 VENV="$PROJECT_DIR/.venv"
 
 if [[ ! -x "$VENV/bin/python" ]]; then
-    echo "ERROR: Whisper virtual environment not found."
+    echo "ERROR: Wispr virtual environment not found."
     echo
     echo "Expected:"
     echo "  $VENV"

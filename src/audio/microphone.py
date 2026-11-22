@@ -7,7 +7,7 @@ class Microphone:
     Backend-neutral representation of a physical microphone.
 
     The backend-specific information is kept inside backend_data so that
-    the rest of Whisper does not need to know whether the microphone is
+    the rest of Wispr does not need to know whether the microphone is
     managed through PipeWire, PulseAudio, or another audio system.
     """
 

@@ -8,7 +8,7 @@ import os
 
 def get_data_dir() -> Path:
     """
-    Return the user's XDG data directory for Whisper.
+    Return the user's XDG data directory for Wispr.
 
     Uses XDG_DATA_HOME when available and falls back to:
         ~/.local/share
@@ -17,9 +17,9 @@ def get_data_dir() -> Path:
     xdg_data_home = os.environ.get("XDG_DATA_HOME")
 
     if xdg_data_home:
-        return Path(xdg_data_home) / "whisper"
+        return Path(xdg_data_home) / "wispr"
 
-    return Path.home() / ".local" / "share" / "whisper"
+    return Path.home() / ".local" / "share" / "wispr"
 
 
 # ============================================================
@@ -52,7 +52,7 @@ TEST_AUDIO = (
 # Runtime recordings are stored in the user's XDG data directory.
 #
 # Example:
-#     ~/.local/share/whisper/recordings/
+#     ~/.local/share/wispr/recordings/
 #
 # This keeps recordings outside the Git repository.
 RECORDINGS_DIR = (
@@ -66,10 +66,10 @@ RETENTION_DAYS = 7
 
 
 # ============================================================
-# WHISPER
+# WISPR
 # ============================================================
 
-# Whisper model size.
+# Wispr model size.
 #
 # Supported values depend on faster-whisper.
 MODEL_SIZE = "small"
