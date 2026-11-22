@@ -66,3 +66,7 @@ class LinuxAudioBackend(AudioBackend):
 
     def stop_recording(self):
         return self._backend.stop_recording()
+
+    def discover_bluetooth_devices(self):
+        if hasattr(self._backend, 'discover_bluetooth_devices'):
+            return self._backend.discover_bluetooth_devices()
