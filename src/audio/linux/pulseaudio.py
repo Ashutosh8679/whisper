@@ -14,6 +14,8 @@ class PulseAudioBackend(AudioBackend):
         self.process = None
         self._raw_output_path = None
         self._output_path = None
+        self._saved_profile = None
+        self._saved_source = None
 
     def is_available(self) -> bool:
         return (
@@ -29,6 +31,82 @@ class PulseAudioBackend(AudioBackend):
             check=True,
         )
         return result.stdout
+
+    def discover_bluetooth_devices(self) -> list[dict]:
+        """
+        Probe Bluetooth devices to detect which have microphone capability.
+        
+        This probes by temporarily switching to HFP profile, checking for
+        an input source, then restoring the original profile. Results are
+        cached in a JSON database.
+        """
+        import json
+        import time
+        from src.audio.linux.bluetooth import BluetoothDeviceDatabase
+        
+        db = BluetoothDeviceDatabase()
+        cards_output = self._run_pactl("list", "cards", "short")
+        
+        for line in cards_output.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+            
+            card_id = parts[0]
+            card_name = parts[1]
+            
+            if "bluez" not in card_name.lower() and "bluetooth" not in card_name.lower():
+                continue
+            
+            # Get current profile
+            try:
+                profiles_output = self._run_pactl(
+                    "list", "cards", "profiles", card_id
+                )
+            except subprocess.CalledProcessError:
+                continue
+            
+            current_profile = None
+            available_profiles = []
+            
+            for profile_line in profiles_output.splitlines():
+                if ": HFP" in profile_line or "handsfree" in profile_line.lower():
+                    available_profiles.append("hfp_handsfree")
+                if "*:" in profile_line:
+                    current_profile = profile_line.split(":")[0].strip().lstrip("*")
+            
+            # Get MAC address from card name
+            if "." in card_name:
+                mac_part = card_name.split(".")[1] if "." in card_name else ""
+                mac = ":".join(mac_part[i:i+2] for i in range(0, len(mac_part), 2)) if mac_part else ""
+            else:
+                continue
+            
+            # Check cache
+            cached = db.get(card_name, mac)
+            if cached:
+                continue
+            
+            # Probe: temporarily switch to HFP, check for source, restore
+            if "hfp_handsfree" in available_profiles:
+                try:
+                    # Save current state
+                    self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
+                    time.sleep(0.5)
+                    
+                    # Check if input source appears
+                    sources = self._run_pactl("list", "sources", "short")
+                    has_input = any(mac.lower() in src.lower() for src in sources.splitlines())
+                    
+                    # Cache result
+                    db.upsert(card_name, mac, has_input)
+                    
+                    # Restore profile
+                    if current_profile:
+                        self._run_pactl("set-card-profile", card_id, current_profile)
+                    
+                except Exception:
+                    pass
 
     def list_microphones(self) -> list[Microphone]:
         output = self._run_pactl("list", "short", "sources")
@@ -92,10 +170,95 @@ class PulseAudioBackend(AudioBackend):
         )
 
     def prepare_microphone(self, microphone: Microphone) -> None:
-        return None
+        """
+        Prepare the microphone for recording.
+        
+        For Bluetooth headsets in A2DP mode, this temporarily switches
+        to HFP/HSP profile so the microphone becomes available.
+        """
+        import json
+        import time
+        from src.audio.linux.bluetooth import BluetoothDeviceDatabase
+        
+        if not microphone.is_bluetooth:
+            return
+        
+        # Get card info from source name
+        source_name = microphone.backend_data.get("source_name", "")
+        if not source_name or "bluez" not in source_name.lower():
+            return
+        
+        # Find the associated card
+        try:
+            output = self._run_pactl("list", "cards", "short")
+        except subprocess.CalledProcessError:
+            return
+        
+        card_id = None
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                cid, cname = parts[0], parts[1]
+                if "bluez" in cname.lower():
+                    card_id = cid
+                    break
+        
+        if not card_id:
+            return
+        
+        # Get current profile
+        try:
+            profiles = self._run_pactl("list", "cards", "profiles", card_id)
+            current_profile = None
+            for line in profiles.splitlines():
+                if "*:" in line:
+                    current_profile = line.split(":")[0].strip().lstrip("*")
+                    break
+        except subprocess.CalledProcessError:
+            return
+        
+        self._saved_profile = current_profile
+        
+        # Switch to HFP if needed
+        if current_profile and "a2dp" in current_profile.lower():
+            try:
+                # Check if HFP is available
+                if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
+                    self._run_pactl("set-card-profile", card_id, "hfp_handsfree")
+                    time.sleep(0.5)
+            except subprocess.CalledProcessError:
+                pass
 
     def restore_microphone(self) -> None:
-        return None
+        """
+        Restore audio state after recording.
+        
+        For Bluetooth headsets, this switches back to the original profile.
+        """
+        import time
+        
+        if self._saved_profile is None:
+            return
+        
+        # Restore profile
+        try:
+            # Need to find the card again
+            output = self._run_pactl("list", "cards", "short")
+            card_id = None
+            for line in output.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    cid, cname = parts[0], parts[1]
+                    if "bluez" in cname.lower():
+                        card_id = cid
+                        break
+            
+            if card_id:
+                self._run_pactl("set-card-profile", card_id, self._saved_profile)
+        except (subprocess.CalledProcessError, AttributeError):
+            pass
+        
+        self._saved_profile = None
 
     def start_recording(
         self,

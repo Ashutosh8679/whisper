@@ -18,6 +18,8 @@ class PipeWireBackend(AudioBackend):
 
     def __init__(self):
         self.process = None
+        self._saved_profile = None
+        self._saved_source = None
 
     def is_available(self) -> bool:
         """
@@ -209,18 +211,180 @@ class PipeWireBackend(AudioBackend):
         """
         Prepare a microphone for recording.
 
-        Bluetooth profile handling will be implemented here later.
+        For Bluetooth headsets in A2DP mode, this temporarily switches
+        to HFP/HSP profile so the microphone becomes available.
         """
-        return None
+        import json
+        import time
+        from src.audio.linux.bluetooth import BluetoothDeviceDatabase
+        
+        if not microphone.is_bluetooth:
+            return
+        
+        # Get card info from description
+        description = microphone.description or ""
+        if "bluez" not in description.lower() and "bluetooth" not in description.lower():
+            return
+        
+        # Get current profile using wpctl
+        try:
+            output = self._run_wpctl("list", "cards", "short")
+        except RuntimeError:
+            return
+        
+        card_id = None
+        for line in output.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                cid = parts[0].rstrip(":")
+                cname = parts[1] if len(parts) > 1 else ""
+                if "bluez" in cname.lower():
+                    card_id = cid
+                    break
+        
+        if not card_id:
+            return
+        
+        # Get current profile
+        try:
+            profiles = self._run_wpctl("list", "card-profiles", card_id)
+            current_profile = None
+            for line in profiles.splitlines():
+                if " *" in line:
+                    current_profile = line.split()[0].rstrip(":")
+                    break
+        except RuntimeError:
+            return
+        
+        self._saved_profile = current_profile
+        
+        # Switch to HFP if needed
+        if current_profile and "a2dp" in current_profile.lower():
+            try:
+                if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
+                    self._run_wpctl("set-card-profile", card_id, "hfp_handsfree")
+                    time.sleep(0.5)
+            except RuntimeError:
+                pass
+
+    def discover_bluetooth_devices(self) -> list[dict]:
+        """
+        Probe Bluetooth devices to detect which have microphone capability.
+        
+        This probes by temporarily switching to HFP profile, checking for
+        an input source, then restoring the original profile. Results are
+        cached in a JSON database.
+        """
+        import json
+        import time
+        from src.audio.linux.bluetooth import BluetoothDeviceDatabase
+        
+        db = BluetoothDeviceDatabase()
+        
+        try:
+            output = self._run_wpctl("list", "cards", "short")
+        except RuntimeError:
+            return []
+        
+        for line in output.splitlines():
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            
+            card_id = parts[0].rstrip(":")
+            card_name = parts[1] if len(parts) > 1 else ""
+            
+            if "bluez" not in card_name.lower() and "bluetooth" not in card_name.lower():
+                continue
+            
+            # Get current profile
+            try:
+                profiles = self._run_wpctl("list", "card-profiles", card_id)
+                current_profile = None
+                for profile_line in profiles.splitlines():
+                    if " *" in profile_line:
+                        current_profile = profile_line.split()[0].rstrip(":")
+                        break
+            except RuntimeError:
+                continue
+            
+            # Get MAC address
+            if "." in card_name:
+                mac_part = card_name.split(".")[1] if "." in card_name else ""
+                mac = ":".join(mac_part[i:i+2] for i in range(0, len(mac_part), 2)) if mac_part else ""
+            else:
+                continue
+            
+            # Check cache
+            cached = db.get(card_name, mac)
+            if cached:
+                continue
+            
+            # Probe: temporarily switch to HFP, check for source, restore
+            if "hfp" in profiles.lower() or "handsfree" in profiles.lower():
+                try:
+                    self._run_wpctl("set-card-profile", card_id, "hfp_handsfree")
+                    time.sleep(0.5)
+                    
+                    # Check if input source appears
+                    status = self._get_status()
+                    lines = status.splitlines()
+                    
+                    # Find Sources section
+                    in_sources = False
+                    for line in lines:
+                        stripped = line.strip()
+                        if stripped == "Sources:":
+                            in_sources = True
+                            continue
+                        if in_sources and "Audio" not in line:
+                            break
+                        if in_sources and "bluez" in stripped.lower():
+                            db.upsert(card_name, mac, True)
+                            break
+                    else:
+                        db.upsert(card_name, mac, False)
+                    
+                    # Restore profile
+                    if current_profile:
+                        self._run_wpctl("set-card-profile", card_id, current_profile)
+                    
+                except Exception:
+                    try:
+                        if current_profile:
+                            self._run_wpctl("set-card-profile", card_id, current_profile)
+                    except Exception:
+                        pass
 
     def restore_microphone(self) -> None:
         """
         Restore audio state after recording.
 
-        No state restoration is required yet because preparation does
-        not modify the PipeWire graph at this stage.
+        For Bluetooth headsets, this switches back to the original profile.
         """
-        return None
+        import time
+        
+        if self._saved_profile is None:
+            return
+        
+        try:
+            output = self._run_wpctl("list", "cards", "short")
+            card_id = None
+            for line in output.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    cid = parts[0].rstrip(":")
+                    cname = parts[1] if len(parts) > 1 else ""
+                    if "bluez" in cname.lower():
+                        card_id = cid
+                        break
+            
+            if card_id:
+                self._run_wpctl("set-card-profile", card_id, self._saved_profile)
+        except RuntimeError:
+            pass
+        
+        self._saved_profile = None
 
     def start_recording(
         self,

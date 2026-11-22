@@ -447,6 +447,11 @@ def command_configure():
 
     try:
         backend = get_audio_backend()
+        
+        # Discover and probe Bluetooth devices first
+        if hasattr(backend, 'discover_bluetooth_devices'):
+            backend.discover_bluetooth_devices()
+        
         sources = backend.list_microphones()
 
     except RuntimeError as error:
