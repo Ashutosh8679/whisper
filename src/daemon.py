@@ -1,12 +1,15 @@
 import json
 import os
 import socket
+import signal
+import sys
 from pathlib import Path
 
 from src.wispr_engine import WisprEngine
 
 
 SOCKET_PATH = Path.home() / ".cache" / "wispr" / "wispr.sock"
+PID_FILE = Path.home() / ".cache" / "wispr" / "wispr.pid"
 
 
 class WisprDaemon:
@@ -26,6 +29,11 @@ class WisprDaemon:
             exist_ok=True,
         )
 
+        # Check if daemon is already running
+        if self._is_running():
+            print("Wispr daemon is already running.")
+            sys.exit(0)
+
         print("Starting Wispr daemon...")
         print("Loading Wispr Small onto GPU...")
 
@@ -34,6 +42,38 @@ class WisprDaemon:
         print("Wispr daemon ready.")
         print(f"Socket: {self.socket_path}")
 
+        # Write PID file
+        self._write_pid()
+
+    def _is_running(self):
+        """Check if another daemon instance is running."""
+        if not PID_FILE.exists():
+            return False
+        
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            # Check if process exists
+            os.kill(pid, 0)
+            return True
+        except (ValueError, ProcessLookupError, PermissionError):
+            # PID file stale or process doesn't exist
+            return False
+
+    def _write_pid(self):
+        """Write current process PID to file."""
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(str(os.getpid()))
+
+    def _cleanup_pid(self):
+        """Remove PID file on shutdown."""
+        if PID_FILE.exists():
+            PID_FILE.unlink()
+
+    def _handle_signal(self, signum, frame):
+        """Handle shutdown signals gracefully."""
+        print("\nReceived shutdown signal.")
+        self.running = False
+
     def remove_old_socket(self):
         """
         Remove a stale socket left behind by a previous daemon.
@@ -41,6 +81,22 @@ class WisprDaemon:
 
         if self.socket_path.exists():
             self.socket_path.unlink()
+        
+        # Also clean up stale PID file
+        if PID_FILE.exists():
+            try:
+                pid = int(PID_FILE.read_text().strip())
+                # Check if it's a different process
+                if pid != os.getpid():
+                    try:
+                        os.kill(pid, 0)
+                        # Different process is still running
+                        return
+                    except (ProcessLookupError, PermissionError):
+                        # Stale PID file
+                        PID_FILE.unlink()
+            except (ValueError, ProcessLookupError, PermissionError):
+                PID_FILE.unlink()
 
     def start(self):
         """
@@ -48,6 +104,10 @@ class WisprDaemon:
         """
 
         self.remove_old_socket()
+
+        # Set up signal handlers for clean shutdown
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
 
         server = socket.socket(
             socket.AF_UNIX,
@@ -91,6 +151,8 @@ class WisprDaemon:
 
             if self.socket_path.exists():
                 self.socket_path.unlink()
+
+            self._cleanup_pid()
 
             # Explicitly release the Wispr engine.
             self.engine = None
